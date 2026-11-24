@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+        <meta name="theme-color" content="#0b0f17">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SolarGuard">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <title>SolarGuard Telemetry Pro - SCADA Solar & Prevención de Riesgos</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        scada: {
+                            bg: '#0b0f17',
+                            card: '#131b2e',
+                            border: '#1f2d4d',
+                            accent: '#00f0ff',
+                            warning: '#ffb703',
+                            danger: '#ff0055',
+                            success: '#00f5a0'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+                        sans: ['Inter', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0b0f17;
+            color: #e2e8f0;
+        }
+        .digital-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* Glassmorphism & SCADA Glow Effects */
+        .scada-panel {
+            background: rgba(19, 27, 46, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid #1f2d4d;
+        }
+        .scada-panel-danger {
+            border-color: rgba(255, 0, 85, 0.6);
+            box-shadow: 0 0 20px rgba(255, 0, 85, 0.2);
+        }
+        .glow-accent {
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.25);
+        }
+        .glow-danger {
+            animation: pulse-danger 1.2s infinite alternate;
+        }
+        @keyframes pulse-danger {
+            0% { box-shadow: 0 0 5px rgba(255, 0, 85, 0.4); }
+            100% { box-shadow: 0 0 25px rgba(255, 0, 85, 0.9); }
+        }
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b0f17;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f2d4d;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00f0ff;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between select-none">
+
+    <!-- HEADER / NAVIGATION -->
+    <header class="bg-slate-950 border-b border-scada-border sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+            <!-- Brand -->
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-cyan-600 to-emerald-400 flex items-center justify-center text-slate-950 font-bold text-xl shadow-lg">
+                    <i class="fa-solid fa-solar-panel"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-wider text-white flex items-center gap-2">
+                        SolarGuard <span class="text-xs px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">TELEMETRY PRO</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Simulador de Telemetría FV & Centro de Seguridad Eléctrica</p>
+                </div>
+            </div>
+
+            <!-- Global Status Indicator & Controls -->
+            <div class="flex items-center gap-3">
+                <!-- System Time -->
+                <div class="hidden sm:flex flex-col items-end px-3 py-1 bg-slate-900 rounded border border-slate-800 digital-font text-xs">
+                    <span class="text-slate-400" id="sys-date">2026-11-21</span>
+                    <span class="text-cyan-400 font-bold" id="sys-time">00:00:00 UTC</span>
+                </div>
+
+                <!-- Alarm Audio Control Button -->
+                <button id="btn-toggle-audio" onclick="toggleAudioMute()" class="px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-300 hover:text-white transition flex items-center gap-2 text-sm">
+                    <i id="audio-icon" class="fa-solid fa-volume-xmark text-slate-400"></i>
+                    <span id="audio-text" class="hidden md:inline">Audio Alarma: Silenciado</span>
+                </button>
+
+                <!-- Status Badge -->
+                <div id="header-status-badge" class="px-4 py-1.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-xs font-bold tracking-wider flex items-center gap-2 uppercase">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span id="header-status-text">Sistema Normal</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABS BAR -->
+        <nav class="max-w-7xl mx-auto px-4 flex space-x-1 border-t border-slate-900 text-sm font-medium">
+            <button onclick="switchTab('tab-telemetry')" id="nav-tab-telemetry" class="tab-btn px-4 py-2.5 text-cyan-400 border-b-2 border-cyan-400 flex items-center gap-2 transition">
+                <i class="fa-solid fa-chart-line"></i> Telemetría & Simulación
+            </button>
+            <button onclick="switchTab('tab-risk')" id="nav-tab-risk" class="tab-btn px-4 py-2.5 text-slate-400 hover:text-white border-b-2 border-transparent flex items-center gap-2 transition">
+                <i class="fa-solid fa-triangle-exclamation"></i> Prevención de Riesgos
+            </button>
+            <button onclick="switchTab('tab-alarm')" id="nav-tab-alarm" class="tab-btn px-4 py-2.5 text-slate-400 hover:text-white border-b-2 border-transparent flex items-center gap-2 transition">
+                <i class="fa-solid fa-shield-halved"></i> Sistema de Alarma & Instalación
+            </button>
+        </nav>
+    </header>
+
+    <!-- ACTIVE CRITICAL ALARM BANNER (DISPLAYS WHEN ALARM TRIPPED) -->
+    <div id="critical-alarm-banner" class="hidden bg-red-600/90 text-white px-4 py-3 border-b border-red-500 glow-danger">
+        <div class="max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-bell-concierge text-2xl animate-bounce"></i>
+                <div>
+                    <h3 class="font-bold text-base flex items-center gap-2">
+                        ¡ALERTA CRÍTICA DE SEGURIDAD ELÉCTRICA!
+                    </h3>
+                    <p class="text-xs text-red-100" id="alarm-banner-msg">Parámetros operativos fuera de margen de tolerancia de seguridad.</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="acknowledgeAlarm()" class="px-4 py-1.5 bg-slate-950 hover:bg-black text-white text-xs font-bold rounded-md border border-slate-700 transition">
+                    Reconocer Alerta
+                </button>
+                <button onclick="resetConditions()" class="px-4 py-1.5 bg-white text-red-900 font-bold text-xs rounded-md hover:bg-red-100 transition">
+                    Restablecer Sistema
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full">
+
+        <!-- ================= TAB 1: TELEMETRY & SIMULATION ================= -->
+        <section id="tab-telemetry" class="space-y-6">
+            
+            <!-- KPI METRICS GRID -->
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <!-- Voltaje DC -->
+                <div class="scada-panel rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+                    <div class="flex justify-between items-start text-slate-400 text-xs font-semibold">
+                        <span>VOLTAJE FV (V DC)</span>
+                        <i class="fa-solid fa-bolt text-amber-400"></i>
+                    </div>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="kpi-v-dc" class="digital-font text-2xl lg:text-3xl font-bold text-white">380.0</span>
+                        <span class="text-xs text-slate-400">V</span>
+                    </div>
+                    <div class="mt-2 text-[10px] text-slate-400 flex justify-between">
+                        <span>Nominal: 360-400V</span>
+                        <span id="kpi-v-status" class="text-emerald-400">OK</span>
+                    </div>
+                </div>
+
+                <!-- Corriente DC -->
+                <div class="scada-panel rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+                    <div class="flex justify-between items-start text-slate-400 text-xs font-semibold">
+                        <span>CORRIENTE (A DC)</span>
+                        <i class="fa-solid fa-wave-square text-cyan-400"></i>
+                    </div>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="kpi-i-dc" class="digital-font text-2xl lg:text-3xl font-bold text-white">9.4</span>
+                        <span class="text-xs text-slate-400">A</span>
+                    </div>
+                    <div class="mt-2 text-[10px] text-slate-400 flex justify-between">
+                        <span>Max Imp: 11.2A</span>
+                        <span id="kpi-i-status" class="text-emerald-400">OK</span>
+                    </div>
+                </div>
+
+                <!-- Potencia Generada -->
+                <div class="scada-panel rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+                    <div class="flex justify-between items-start text-slate-400 text-xs font-semibold">
+                        <span>POTENCIA (W)</span>
+                        <i class="fa-solid fa-plug-circle-bolt text-emerald-400"></i>
+                    </div>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="kpi-power" class="digital-font text-2xl lg:text-3xl font-bold text-emerald-400">3572</span>
+                        <span class="text-xs text-slate-400">W</span>
+                    </div>
+                    <div class="mt-2 text-[10px] text-slate-400 flex justify-between">
+                        <span>Eficiencia: <span id="kpi-eff">96.8%</span></span>
+                    </div>
+                </div>
+
+                <!-- Temperatura Celda -->
+                <div class="scada-panel rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+                    <div class="flex justify-between items-start text-slate-400 text-xs font-semibold">
+                        <span>TEMP. CELDA</span>
+                        <i class="fa-solid fa-temperature-half text-rose-400"></i>
+                    </div>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="kpi-temp" class="digital-font text-2xl lg:text-3xl font-bold text-white">42.5</span>
+                        <span class="text-xs text-slate-400">°C</span>
+                    </div>
+                    <div class="mt-2 text-[10px] text-slate-400 flex justify-between">
+                        <span>Máx: 75°C</span>
+                        <span id="kpi-temp-status" class="text-emerald-400">Óptima</span>
+                    </div>
+                </div>
+
+                <!-- Estado de Baterías SOC -->
+                <div class="scada-panel rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+                    <div class="flex justify-between items-start text-slate-400 text-xs font-semibold">
+                        <span>BATERÍA (SOC)</span>
+                        <i class="fa-solid fa-car-battery text-purple-400"></i>
+                    </div>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="kpi-soc" class="digital-font text-2xl lg:text-3xl font-bold text-purple-300">84</span>
+                        <span class="text-xs text-slate-400">%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 mt-2">
+                        <div id="kpi-soc-bar" class="bg-purple-500 h-1.5 rounded-full" style="width: 84%"></div>
+                    </div>
+                </div>
+
+                <!-- Resistencia Aislamiento -->
+                <div class="scada-panel rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
+                    <div class="flex justify-between items-start text-slate-400 text-xs font-semibold">
+                        <span>AISLAMIENTO</span>
+                        <i class="fa-solid fa-shield-cat text-cyan-300"></i>
+                    </div>
+                    <div class="mt-2 flex items-baseline justify-between">
+                        <span id="kpi-iso" class="digital-font text-2xl lg:text-3xl font-bold text-white">45.0</span>
+                        <span class="text-xs text-slate-400">MΩ</span>
+                    </div>
+                    <div class="mt-2 text-[10px] text-slate-400 flex justify-between">
+                        <span>Mín: 1.0 MΩ</span>
+                        <span id="kpi-iso-status" class="text-emerald-400 font-bold">Seguro</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CENTER WORKSPACE: CONTROLS + GRAPH + LOG -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- SIMULATOR CONTROL PANEL (4 cols) -->
+                <div class="lg:col-span-4 space-y-6">
+                    <div class="scada-panel rounded-xl p-5 border border-scada-border">
+                        <h2 class="text-base font-bold text-white flex items-center justify-between pb-3 border-b border-slate-800">
+                            <span><i class="fa-solid fa-sliders text-cyan-400 mr-2"></i>Controles de Simulación</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 font-mono">TIEMPO REAL</span>
+                        </h2>
+
+                        <div class="mt-4 space-y-5">
+                            <!-- Slider 1: Irradiancia Solar -->
+                            <div>
+                                <div class="flex justify-between text-xs font-medium mb-1">
+                                    <label for="slider-irradiance" class="text-slate-300">Irradiancia Solar (W/m²):</label>
+                                    <span id="val-irradiance" class="digital-font text-cyan-400 font-bold">850 W/m²</span>
+                                </div>
+                                <input type="range" id="slider-irradiance" min="0" max="1200" value="850" step="10" oninput="updateSimParameters()" class="w-full accent-cyan-400 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                                <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                                    <span>0 (Noche)</span>
+                                    <span>600 (Nublado)</span>
+                                    <span>1200 (Sol Pico)</span>
+                                </div>
+                            </div>
+
+                            <!-- Slider 2: Temperatura Ambiente -->
+                            <div>
+                                <div class="flex justify-between text-xs font-medium mb-1">
+                                    <label for="slider-temp" class="text-slate-300">Temperatura Ambiente (°C):</label>
+                                    <span id="val-temp" class="digital-font text-rose-400 font-bold">28 °C</span>
+                                </div>
+                                <input type="range" id="slider-temp" min="10" max="55" value="28" step="1" oninput="updateSimParameters()" class="w-full accent-rose-400 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                                <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                                    <span>10°C (Frío)</span>
+                                    <span>35°C (Estándar)</span>
+                                    <span>55°C (Extremo)</span>
+                                </div>
+                            </div>
+
+                            <!-- Slider 3: Carga del Sistema -->
+                            <div>
+                                <div class="flex justify-between text-xs font-medium mb-1">
+                                    <label for="slider-load" class="text-slate-300">Demanda de Carga (W):</label>
+                                    <span id="val-load" class="digital-font text-emerald-400 font-bold">2500 W</span>
+                                </div>
+                                <input type="range" id="slider-load" min="0" max="5000" value="2500" step="100" oninput="updateSimParameters()" class="w-full accent-emerald-400 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                                <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                                    <span>0 W</span>
+                                    <span>2.5 kW</span>
+                                    <span>5.0 kW (Sobrecarga)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FAULT INJECTION BUTTONS -->
+                        <div class="mt-6 pt-4 border-t border-slate-800">
+                            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                <i class="fa-solid fa-bug text-amber-400"></i> Inyección de Fallos Críticos
+                            </h3>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <button onclick="injectFault('overvoltage')" class="px-3 py-2 bg-slate-900 hover:bg-amber-950/50 text-amber-300 border border-amber-800/50 hover:border-amber-500 rounded-lg text-xs font-medium transition text-left flex items-center gap-2">
+                                    <i class="fa-solid fa-bolt text-amber-400"></i> Sobretensión DC (>500V)
+                                </button>
+                                <button onclick="injectFault('arc_fault')" class="px-3 py-2 bg-slate-900 hover:bg-rose-950/50 text-rose-300 border border-rose-800/50 hover:border-rose-500 rounded-lg text-xs font-medium transition text-left flex items-center gap-2">
+                                    <i class="fa-solid fa-fire text-rose-400"></i> Arco Eléctrico / Aisl.
+                                </button>
+                                <button onclick="injectFault('overtemp')" class="px-3 py-2 bg-slate-900 hover:bg-red-950/50 text-red-300 border border-red-800/50 hover:border-red-500 rounded-lg text-xs font-medium transition text-left flex items-center gap-2">
+                                    <i class="fa-solid fa-temperature-arrow-up text-red-400"></i> Sobretemperatura (>80°C)
+                                </button>
+                                <button onclick="resetConditions()" class="px-3 py-2 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-600 rounded-lg text-xs font-bold transition text-center flex items-center justify-center gap-2">
+                                    <i class="fa-solid fa-rotate-left"></i> Restablecer Normal
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SYSTEM DIAGNOSTIC BRIEF CARD -->
+                    <div class="scada-panel rounded-xl p-4 border border-scada-border text-xs space-y-2">
+                        <div class="flex justify-between items-center text-slate-300 font-bold">
+                            <span><i class="fa-solid fa-microchip text-cyan-400 mr-1.5"></i>Estado del Controlador MPPT</span>
+                            <span id="mppt-status" class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">TRACKING OK</span>
+                        </div>
+                        <p class="text-slate-400 text-[11px] leading-relaxed">
+                            Punto de máxima potencia activo. Ajustando automáticamente ciclo de trabajo PWM según la irradiancia actual.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- REAL-TIME GRAPH & EVENT LOG (8 cols) -->
+                <div class="lg:col-span-8 space-y-6">
+                    
+                    <!-- CHART CONTAINER -->
+                    <div class="scada-panel rounded-xl p-5 border border-scada-border">
+                        <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                            <div>
+                                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                                    <i class="fa-solid fa-chart-area text-cyan-400"></i> Telemetría DINÁMICA en Tiempo Real
+                                </h3>
+                                <p class="text-xs text-slate-400">Monitoreo continuo de Potencia (W), Irradiancia (W/m²) y Voltaje DC (V)</p>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs">
+                                <span class="flex items-center gap-1 text-emerald-400"><span class="w-3 h-0.5 bg-emerald-400 inline-block"></span> Potencia (W)</span>
+                                <span class="flex items-center gap-1 text-cyan-400"><span class="w-3 h-0.5 bg-cyan-400 inline-block"></span> Irradiancia (W/m²)</span>
+                                <span class="flex items-center gap-1 text-amber-400"><span class="w-3 h-0.5 bg-amber-400 inline-block"></span> Voltaje (V)</span>
+                            </div>
+                        </div>
+
+                        <!-- CHART CANVAS -->
+                        <div class="w-full h-72 relative">
+                            <canvas id="telemetryChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- LIVE EVENT LOG / BITÁCORA -->
+                    <div class="scada-panel rounded-xl p-5 border border-scada-border">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-list-check text-cyan-400"></i> Bitácora de Eventos y Alarmas del Sistema
+                            </h3>
+                            <button onclick="clearEventLog()" class="text-xs text-slate-400 hover:text-white underline">Limpiar Registro</button>
+                        </div>
+                        <div id="event-log-container" class="h-44 overflow-y-auto font-mono text-xs space-y-1.5 bg-slate-950/80 p-3 rounded-lg border border-slate-900">
+                            <!-- Dynamic log entries injected here -->
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ================= TAB 2: PREVENCIÓN DE RIESGOS ELÉCTRICOS ================= -->
+        <section id="tab-risk" class="hidden space-y-6">
+            
+            <!-- SECTION INTRO -->
+            <div class="scada-panel rounded-xl p-5 border border-slate-800">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-shield-virus text-amber-400"></i> Evaluador de Riesgos Eléctricos en Sistemas Fotovoltaicos
+                </h2>
+                <p class="text-xs text-slate-300 mt-1 leading-relaxed">
+                    Análisis dinámico del riesgo eléctrico basado en la telemetría actual y guías de seguridad conforme a normativas <strong>NFPA 70E, IEC 62446 y RETIE / NEC 690</strong>.
+                </p>
+            </div>
+
+            <!-- DYNAMIC RISK DIAGNOSTIC CARDS -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <!-- Riesgo 1: Arco Eléctrico DC -->
+                <div id="risk-card-arc" class="scada-panel rounded-xl p-4 border border-slate-800 transition">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold text-slate-400 uppercase">Arco Eléctrico DC</span>
+                        <i class="fa-solid fa-burst text-amber-400"></i>
+                    </div>
+                    <div class="mt-3">
+                        <span id="risk-arc-level" class="text-sm font-bold text-emerald-400">Bajo / Normal</span>
+                        <p id="risk-arc-desc" class="text-[11px] text-slate-400 mt-1 leading-normal">
+                            Corriente DC continua dentro de rangos normales. Sin indicios de ionización o arcos en conectores MC4.
+                        </p>
+                    </div>
+                    <div class="mt-3 pt-2 border-t border-slate-800/60 text-[10px] text-slate-500">
+                        Mitigación: Interruptor AFCI / Inspección Termográfica.
+                    </div>
+                </div>
+
+                <!-- Riesgo 2: Choque Eléctrico -->
+                <div id="risk-card-shock" class="scada-panel rounded-xl p-4 border border-slate-800 transition">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold text-slate-400 uppercase">Choque Eléctrico (Voc)</span>
+                        <i class="fa-solid fa-hand-lightning text-cyan-400"></i>
+                    </div>
+                    <div class="mt-3">
+                        <span id="risk-shock-level" class="text-sm font-bold text-amber-400">Peligro Tensión DC</span>
+                        <p id="risk-shock-desc" class="text-[11px] text-slate-400 mt-1 leading-normal">
+                            Tensión del arreglo > 120V DC. Riesgo de choque mortal en circuito abierto. Requiere EPP Dieléctrico.
+                        </p>
+                    </div>
+                    <div class="mt-3 pt-2 border-t border-slate-800/60 text-[10px] text-slate-500">
+                        EPP Exigido: Guantes Dieléctricos Clase 0 (1000V).
+                    </div>
+                </div>
+
+                <!-- Riesgo 3: Estrés Térmico -->
+                <div id="risk-card-thermal" class="scada-panel rounded-xl p-4 border border-slate-800 transition">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold text-slate-400 uppercase">Estrés Térmico Celda</span>
+                        <i class="fa-solid fa-temperature-arrow-up text-rose-400"></i>
+                    </div>
+                    <div class="mt-3">
+                        <span id="risk-thermal-level" class="text-sm font-bold text-emerald-400">Temperatura Segura</span>
+                        <p id="risk-thermal-desc" class="text-[11px] text-slate-400 mt-1 leading-normal">
+                            Temperatura de celdas bajo umbral de degradación acelerada y descontrol térmico.
+                        </p>
+                    </div>
+                    <div class="mt-3 pt-2 border-t border-slate-800/60 text-[10px] text-slate-500">
+                        Umbral Crítico: > 75°C (Revisar sombras/Hotspots).
+                    </div>
+                </div>
+
+                <!-- Riesgo 4: Falla de Aislamiento -->
+                <div id="risk-card-iso" class="scada-panel rounded-xl p-4 border border-slate-800 transition">
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs font-bold text-slate-400 uppercase">Falla Aislamiento Tierra</span>
+                        <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+                    </div>
+                    <div class="mt-3">
+                        <span id="risk-iso-level" class="text-sm font-bold text-emerald-400">Aislamiento Correcto</span>
+                        <p id="risk-iso-desc" class="text-[11px] text-slate-400 mt-1 leading-normal">
+                            Resistencia a tierra por encima de 1 MΩ. Corriente de fuga a estructura inexistente.
+                        </p>
+                    </div>
+                    <div class="mt-3 pt-2 border-t border-slate-800/60 text-[10px] text-slate-500">
+                        Monitoreo continuo de ISO en inversor.
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- INTERACTIVE LOTO SAFETY CHECKLIST -->
+            <div class="scada-panel rounded-xl p-6 border border-slate-800">
+                <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                    <div>
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-lock text-rose-500"></i> Protocolo de Bloqueo y Etiquetado (LOTO) para Intervención
+                        </h3>
+                        <p class="text-xs text-slate-400">Complete la secuencia de seguridad obligatoria antes de realizar mantenimiento técnico.</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="text-right">
+                            <span class="text-xs text-slate-400">Progreso de Seguridad:</span>
+                            <div id="loto-progress-pct" class="text-sm font-bold text-cyan-400 font-mono">0%</div>
+                        </div>
+                        <div class="w-32 bg-slate-800 rounded-full h-3 border border-slate-700">
+                            <div id="loto-progress-bar" class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CHECKLIST ITEMS -->
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    <label class="flex items-start gap-3 p-3 bg-slate-950/60 rounded-lg border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+                        <input type="checkbox" onchange="updateLotoProgress()" class="loto-check mt-1 accent-cyan-400 w-4 h-4">
+                        <div>
+                            <span class="text-xs font-bold text-white block">1. Equipamiento de Protección Individual (EPP)</span>
+                            <p class="text-[11px] text-slate-400">Uso de guantes dieléctricos Clase 0 (1000V DC), careta de protección contra arco eléctrico y calzado dieléctrico.</p>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 bg-slate-950/60 rounded-lg border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+                        <input type="checkbox" onchange="updateLotoProgress()" class="loto-check mt-1 accent-cyan-400 w-4 h-4">
+                        <div>
+                            <span class="text-xs font-bold text-white block">2. Desconexión de Carga AC</span>
+                            <p class="text-[11px] text-slate-400">Abrir el interruptor magnetotérmico principal de salida en corriente alterna (AC) del inversor.</p>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 bg-slate-950/60 rounded-lg border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+                        <input type="checkbox" onchange="updateLotoProgress()" class="loto-check mt-1 accent-cyan-400 w-4 h-4">
+                        <div>
+                            <span class="text-xs font-bold text-white block">3. Apertura de Seccionador DC</span>
+                            <p class="text-[11px] text-slate-400">Girar e inmovilizar el seccionador bajo carga de corriente continua (V DC) del string fotovoltaico.</p>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 bg-slate-950/60 rounded-lg border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+                        <input type="checkbox" onchange="updateLotoProgress()" class="loto-check mt-1 accent-cyan-400 w-4 h-4">
+                        <div>
+                            <span class="text-xs font-bold text-white block">4. Instalación de Candado y Etiqueta LOTO</span>
+                            <p class="text-[11px] text-slate-400">Colocar el candado físico de seguridad e identificación de advertencia de "Peligro: Mantenimiento en curso".</p>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 bg-slate-950/60 rounded-lg border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+                        <input type="checkbox" onchange="updateLotoProgress()" class="loto-check mt-1 accent-cyan-400 w-4 h-4">
+                        <div>
+                            <span class="text-xs font-bold text-white block">5. Verificación de Ausencia de Tensión</span>
+                            <p class="text-[11px] text-slate-400">Medición en bornes con multímetro CAT III 1000V / CAT IV 600V comprobando 0.0V DC y 0.0V AC.</p>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start gap-3 p-3 bg-slate-950/60 rounded-lg border border-slate-800 cursor-pointer hover:border-slate-700 transition">
+                        <input type="checkbox" onchange="updateLotoProgress()" class="loto-check mt-1 accent-cyan-400 w-4 h-4">
+                        <div>
+                            <span class="text-xs font-bold text-white block">6. Descarga y Puesta a Tierra</span>
+                            <p class="text-[11px] text-slate-400">Esperar 5 minutos para la descarga de condensadores del inversor y verificar continuidad a masa del chasis.</p>
+                        </div>
+                    </label>
+
+                </div>
+
+                <!-- LOTO STATUS BANNER -->
+                <div id="loto-status-box" class="mt-5 p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-xs">
+                    <span class="text-slate-400" id="loto-status-text"><i class="fa-solid fa-triangle-exclamation text-amber-400 mr-2"></i>Estado: Mantenimiento NO autorizado. Complete todos los pasos.</span>
+                    <button id="btn-permit" disabled class="px-4 py-1.5 bg-slate-800 text-slate-500 font-bold rounded cursor-not-allowed transition">
+                        Emitir Permiso de Trabajo
+                    </button>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ================= TAB 3: SISTEMA DE ALARMA E INSTALACIÓN ================= -->
+        <section id="tab-alarm" class="hidden space-y-6">
+            
+            <!-- SCHEMATIC ARCHITECTURE OVERVIEW -->
+            <div class="scada-panel rounded-xl p-6 border border-slate-800">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-diagram-project text-cyan-400"></i> Arquitectura Eléctrica e Instalación del Sistema de Alarmas
+                </h2>
+                <p class="text-xs text-slate-300 mt-1 leading-relaxed">
+                    Esquema interactivo de protección y monitoreo continuo para arreglo fotovoltaico de 400V DC con protecciones gPV, DPS, acondicionamiento de señal con microcontrolador e indicación lumínico-acústica 24V DC.
+                </p>
+
+                <!-- INTERACTIVE SVG DIAGRAM -->
+                <div class="mt-6 bg-slate-950 rounded-xl p-4 border border-slate-900 overflow-x-auto">
+                    <div class="min-w-[750px]">
+                        <svg viewBox="0 0 900 320" class="w-full h-auto text-xs font-mono">
+                            <!-- Background Grid lines -->
+                            <defs>
+                                <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                                    <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#1f2d4d" stroke-width="0.5" opacity="0.4"/>
+                                </pattern>
+                            </defs>
+                            <rect width="900" height="320" fill="url(#grid)" rx="8" />
+
+                            <!-- 1. PANELES SOLARES -->
+                            <g class="cursor-pointer hover:opacity-90" onclick="showDiagramDetail('paneles')">
+                                <rect x="30" y="80" width="120" height="150" rx="6" fill="#131b2e" stroke="#00f0ff" stroke-width="2"/>
+                                <path d="M 45 100 L 135 100 M 45 130 L 135 130 M 45 160 L 135 160 M 45 190 L 135 190 M 90 80 L 90 230" stroke="#00f0ff" stroke-width="1" stroke-dasharray="3,3"/>
+                                <text x="90" y="215" fill="#ffffff" font-size="11" text-anchor="middle" font-weight="bold">ARREGLO FV</text>
+                                <text x="90" y="248" fill="#94a3b8" font-size="9" text-anchor="middle">380V DC / 10A</text>
+                            </g>
+
+                            <!-- Lines: Panels to Fuses -->
+                            <line x1="150" y1="120" x2="200" y2="120" stroke="#ffb703" stroke-width="3"/>
+                            <line x1="150" y1="190" x2="200" y2="190" stroke="#38bdf8" stroke-width="3"/>
+
+                            <!-- 2. FUSIBLES gPV -->
+                            <g class="cursor-pointer hover:opacity-90" onclick="showDiagramDetail('fusibles')">
+                                <rect x="200" y="95" width="60" height="50" rx="4" fill="#1e293b" stroke="#ffb703" stroke-width="1.5"/>
+                                <rect x="200" y="165" width="60" height="50" rx="4" fill="#1e293b" stroke="#38bdf8" stroke-width="1.5"/>
+                                <line x1="210" y1="120" x2="250" y2="120" stroke="#ffb703" stroke-width="2"/>
+                                <line x1="210" y1="190" x2="250" y2="190" stroke="#38bdf8" stroke-width="2"/>
+                                <text x="230" y="160" fill="#cbd5e1" font-size="9" text-anchor="middle">gPV 15A</text>
+                            </g>
+
+                            <!-- Lines: Fuses to DPS -->
+                            <line x1="260" y1="120" x2="330" y2="120" stroke="#ffb703" stroke-width="3"/>
+                            <line x1="260" y1="190" x2="330" y2="190" stroke="#38bdf8" stroke-width="3"/>
+
+                            <!-- Node to DPS -->
+                            <circle cx="310" cy="120" r="4" fill="#ffb703"/>
+                            <circle cx="310" cy="190" r="4" fill="#38bdf8"/>
+                            <line x1="310" y1="120" x2="310" y2="140" stroke="#ffb703" stroke-width="2"/>
+                            <line x1="310" y1="190" x2="310" y2="170" stroke="#38bdf8" stroke-width="2"/>
+
+                            <!-- 3. PROTECCIÓN DPS DC -->
+                            <g class="cursor-pointer hover:opacity-90" onclick="showDiagramDetail('dps')">
+                                <rect x="285" y="140" width="50" height="30" rx="4" fill="#854d0e" stroke="#f59e0b" stroke-width="1.5"/>
+                                <text x="310" y="158" fill="#ffffff" font-size="9" text-anchor="middle" font-bold">DPS DC</text>
+                                <!-- Ground connection -->
+                                <line x1="310" y1="170" x2="310" y2="280" stroke="#22c55e" stroke-width="2" stroke-dasharray="4,2"/>
+                                <path d="M 300 280 L 320 280 M 304 285 L 316 285 M 308 290 L 312 290" stroke="#22c55e" stroke-width="2"/>
+                            </g>
+
+                            <!-- Lines: to Seccionador -->
+                            <line x1="330" y1="120" x2="390" y2="120" stroke="#ffb703" stroke-width="3"/>
+                            <line x1="330" y1="190" x2="390" y2="190" stroke="#38bdf8" stroke-width="3"/>
+
+                            <!-- 4. SECCIONADOR DC -->
+                            <g class="cursor-pointer hover:opacity-90" onclick="showDiagramDetail('seccionador')">
+                                <rect x="390" y="95" width="70" height="120" rx="5" fill="#1e293b" stroke="#ef4444" stroke-width="1.5"/>
+                                <circle cx="425" cy="130" r="10" fill="#ef4444"/>
+                                <text x="425" y="195" fill="#ffffff" font-size="9" text-anchor="middle" font-weight="bold">SECCIONADOR</text>
+                                <text x="425" y="207" fill="#94a3b8" font-size="8" text-anchor="middle">1000V / 32A DC</text>
+                            </g>
+
+                            <!-- Lines: to Sensors & Inverter -->
+                            <line x1="460" y1="120" x2="520" y2="120" stroke="#ffb703" stroke-width="3"/>
+                            <line x1="460" y1="190" x2="520" y2="190" stroke="#38bdf8" stroke-width="3"/>
+
+                            <!-- 5. SENSORES DE TELEMETRÍA (Hall + Shunt) -->
+                            <g class="cursor-pointer hover:opacity-90" onclick="showDiagramDetail('sensores')">
+                                <circle cx="490" cy="120" r="12" fill="#0284c7" stroke="#38bdf8" stroke-width="1.5"/>
+                                <text x="490" y="123" fill="#ffffff" font-size="9" text-anchor="middle">V/I</text>
+                                <text x="490" y="95" fill="#38bdf8" font-size="8" text-anchor="middle">Sensores Hall</text>
+                                <!-- Signal cable to MCU -->
+                                <path d="M 490 132 L 490 240 L 610 240" fill="none" stroke="#00f0ff" stroke-width="1.5" stroke-dasharray="2,2"/>
+                            </g>
+
+                            <!-- 6. INVERSOR / MPPT -->
+                            <g class="cursor-pointer hover:opacity-90" onclick="showDiagramDetail('inversor')">
+                                <rect x="520" y="80" width="110" height="150" rx="6" fill="#131b2e" stroke="#10b981" stroke-width="2"/>
+                                <text x="575" y="110" fill="#ffffff" font-size="11" text-anchor="middle" font-weight="bold">INVERSOR</text>
+                                <text x="575" y="125" fill="#10b981" font-size="9" text-anchor="middle">MPPT CONTROL</text>
+                                <rect x="545" y="140" width="60" height="40" fill="#0f172a" rx="4" stroke="#334155"/>
+                                <text x="575" y="164" fill="#00f0ff" font-size="10" text-anchor="middle" font-family="monospace">AC OUT</text>
+                            </g>
+
+                            <!-- 7. UNIDAD MONITOREO Y ALARMA (ESP32 + RELÉ) -->
+                            <g class="cursor-pointer hover:opacity-90" onclick="showDiagramDetail('alarma_unit')">
+                                <rect x="610" y="210" width="120" height="70" rx="6" fill="#1e1b4b" stroke="#6366f1" stroke-width="2"/>
+                                <text x="670" y="235" fill="#ffffff" font-size="10" text-anchor="middle" font-weight="bold">CONTROLADOR ESP32</text>
+                                <text x="670" y="250" fill="#a5b4fc" font-size="8" text-anchor="middle">Lógica Alarma + Relé SSR</text>
+                                <circle cx="715" cy="225" r="4" fill="#22c55e"/>
+                            </g>
+
+                            <!-- Wire from MCU to Alarm Siren -->
+                            <line x1="730" y1="245" x2="780" y2="245" stroke="#ff0055" stroke-width="2"/>
+
+                            <!-- 8. SIRENA Y BALIZA 24V -->
+                            <g class="cursor-pointer hover:opacity-90" onclick="showDiagramDetail('baliza')">
+                                <polygon points="780,230 830,210 830,280 780,260" fill="#881337" stroke="#ff0055" stroke-width="2"/>
+                                <text x="805" y="248" fill="#ffffff" font-size="9" text-anchor="middle" font-weight="bold">SIRENA</text>
+                                <text x="805" y="295" fill="#ff0055" font-size="9" text-anchor="middle">24V DC / 105dB</text>
+                            </g>
+                        </svg>
+                    </div>
+                </div>
+
+                <!-- DIAGRAM ELEMENT DETAILS BOX -->
+                <div id="diagram-detail-box" class="mt-4 p-4 rounded-lg bg-slate-900 border border-slate-800 text-xs">
+                    <h4 class="font-bold text-cyan-400 flex items-center gap-2" id="diag-title">
+                        <i class="fa-solid fa-circle-info"></i> Haz clic en cualquier componente del esquema para ver sus especificaciones técnicas de instalación.
+                    </h4>
+                    <p class="text-slate-300 mt-1 leading-relaxed" id="diag-desc">
+                        El diagrama ilustra el flujo de potencia desde las cadenas fotovoltaicas hasta el inversor, incorporando puntos de seccionamiento de emergencia, supresores de sobretensión en corriente continua y el subsistema de alarma gobernado por microcontrolador.
+                    </p>
+                </div>
+            </div>
+
+            <!-- HARDWARE DIMENSIONING & SPECIFICATIONS TABLE -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- SPECS TABLE (7 cols) -->
+                <div class="lg:col-span-7 scada-panel rounded-xl p-5 border border-slate-800">
+                    <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-list-ol text-cyan-400"></i> Tabla de Dimensionamiento de Protecciones Eléctricas
+                    </h3>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs text-slate-300 border-collapse">
+                            <thead>
+                                <tr class="bg-slate-900 text-slate-400 border-b border-slate-800">
+                                    <th class="p-2.5">Componente</th>
+                                    <th class="p-2.5">Especificación Recomendada</th>
+                                    <th class="p-2.5">Criterio de Selección / Norma</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800/60">
+                                <tr>
+                                    <td class="p-2.5 font-bold text-white">Fusibles FV (gPV)</td>
+                                    <td class="p-2.5 font-mono text-cyan-400">15A - 20A / 1000V DC</td>
+                                    <td class="p-2.5 text-slate-400">1,56 × Isc de la cadena (IEC 60269-6).</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2.5 font-bold text-white">Descargador DPS (SPD)</td>
+                                    <td class="p-2.5 font-mono text-cyan-400">Tipo 2 / Uc = 1000 V DC</td>
+                                    <td class="p-2.5 text-slate-400">In = 20 kA, Imax = 40 kA (IEC 61643-31).</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2.5 font-bold text-white">Seccionador DC</td>
+                                    <td class="p-2.5 font-mono text-cyan-400">4 Polos / 32A - 1000V</td>
+                                    <td class="p-2.5 text-slate-400">Categoría DC-PV2 bajo carga.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2.5 font-bold text-white">Sensor de Corriente</td>
+                                    <td class="p-2.5 font-mono text-cyan-400">Efecto Hall ACS758 (50A)</td>
+                                    <td class="p-2.5 text-slate-400">Aislamiento galvánico de alta tensión.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2.5 font-bold text-white">Relé de Alarma</td>
+                                    <td class="p-2.5 font-mono text-cyan-400">Relé Optoacoplado / SSR 24V</td>
+                                    <td class="p-2.5 text-slate-400">Activación rápida (<10ms) sin chispa.</td>
+                                </tr>
+                                <tr>
+                                    <td class="p-2.5 font-bold text-white">Conductores DC</td>
+                                    <td class="p-2.5 font-mono text-cyan-400">Solar Cable H1Z2Z2-K 6mm²</td>
+                                    <td class="p-2.5 text-slate-400">Doble aislamiento, libre de halógenos.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- STEP-BY-STEP INSTALLATION SEQUENCE (5 cols) -->
+                <div class="lg:col-span-5 scada-panel rounded-xl p-5 border border-slate-800">
+                    <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-gears text-emerald-400"></i> Secuencia Técnicamente Correcta de Instalación
+                    </h3>
+
+                    <ol class="space-y-3 text-xs text-slate-300">
+                        <li class="flex items-start gap-3 bg-slate-950/60 p-2.5 rounded-lg border border-slate-900">
+                            <span class="w-5 h-5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-700 flex items-center justify-center font-bold text-[10px] shrink-0">1</span>
+                            <div>
+                                <strong class="text-white block">Montaje de Estructura y Puesta a Tierra</strong>
+                                Interconectar marcos de aluminio de paneles a la red de tierra general con cable verde/amarillo de 16mm².
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-3 bg-slate-950/60 p-2.5 rounded-lg border border-slate-900">
+                            <span class="w-5 h-5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-700 flex items-center justify-center font-bold text-[10px] shrink-0">2</span>
+                            <div>
+                                <strong class="text-white block">Instalación del Cuadro de Protección DC</strong>
+                                Fijar tablero IP65 montando fusibles gPV, supresor DPS y seccionador en riel DIN.
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-3 bg-slate-950/60 p-2.5 rounded-lg border border-slate-900">
+                            <span class="w-5 h-5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-700 flex items-center justify-center font-bold text-[10px] shrink-0">3</span>
+                            <div>
+                                <strong class="text-white block">Integración de Sensores y Control de Alarma</strong>
+                                Conectar sensor Hall en serie con la línea positiva (+) y divisor resistivo de precisión para voltaje al microcontrolador.
+                            </div>
+                        </li>
+                        <li class="flex items-start gap-3 bg-slate-950/60 p-2.5 rounded-lg border border-slate-900">
+                            <span class="w-5 h-5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-700 flex items-center justify-center font-bold text-[10px] shrink-0">4</span>
+                            <div>
+                                <strong class="text-white block">Puesta en Marcha y Calibración</strong>
+                                Verificar la polaridad con multímetro antes de cerrar seccionador y probar el disparo de la alarma mediante simulación de corte.
+                            </div>
+                        </li>
+                    </ol>
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-slate-950 border-t border-slate-900 py-4 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <p>SolarGuard Telemetry Pro © 2026 - Centro de Simulación y Prevención de Riesgos Eléctricos FV</p>
+            <p class="text-[11px] text-slate-600">Cumple normativas IEC 62446 / NFPA 70E / RETIE / NEC 690</p>
+        </div>
+    </footer>
+
+    <!-- LOGIC & SIMULATION ENGINE SCRIPT -->
+    <script>
+        /* ==========================================================================
+           GLOBAL STATE & TELEMETRY PARAMETERS
+           ========================================================================== */
+        const state = {
+            // Environmental & Load Sliders
+            irradiance: 850,     // W/m^2
+            ambientTemp: 28,     // °C
+            loadDemand: 2500,    // W
+            
+            // Calculated Electrical Metrics
+            vDC: 380.0,          // Volts DC
+            iDC: 9.4,            // Amperes DC
+            power: 3572,         // Watts DC
+            cellTemp: 42.5,      // °C
+            batterySOC: 84,      // %
+            isoResistance: 45.0, // MΩ
+
+            // System Status Flags
+            faultActive: false,
+            faultType: null,      // 'overvoltage', 'arc_fault', 'overtemp'
+            alarmMuted: true,
+            alarmAcknowledged: false,
+
+            // Audio Context
+            audioCtx: null,
+            oscillator: null,
+            gainNode: null,
+
+            // Chart instance
+            chart: null,
+            chartData: {
+                labels: [],
+                power: [],
+                irradiance: [],
+                voltage: []
+            }
+        };
+
+        /* ==========================================================================
+           INITIALIZATION ON WINDOW LOAD
+           ========================================================================== */
+        window.onload = function() {
+            initClock();
+            initChart();
+            updateSimParameters();
+            
+            // Periodical telemetry loop (1 update per second)
+            setInterval(telemetryLoop, 1000);
+
+            // Initial log entry
+            addLogEntry('INFO', 'Sistema SolarGuard Telemetry Pro inicializado correctamente. Modo normal.');
+        };
+
+        /* ==========================================================================
+           REAL-TIME CLOCK
+           ========================================================================== */
+        function initClock() {
+            function tick() {
+                const now = new Date();
+                document.getElementById('sys-date').innerText = now.toISOString().split('T')[0];
+                document.getElementById('sys-time').innerText = now.toTimeString().split(' ')[0] + ' local';
+            }
+            tick();
+            setInterval(tick, 1000);
+        }
+
+        /* ==========================================================================
+           TELEMETRY SIMULATION MATHEMATICAL MODEL
+           ========================================================================== */
+        function updateSimParameters() {
+            if (state.faultActive) return; // Fault overrides slider calculations
+
+            state.irradiance = parseFloat(document.getElementById('slider-irradiance').value);
+            state.ambientTemp = parseFloat(document.getElementById('slider-temp').value);
+            state.loadDemand = parseFloat(document.getElementById('slider-load').value);
+
+            // UI Slider Labels
+            document.getElementById('val-irradiance').innerText = `${state.irradiance} W/m²`;
+            document.getElementById('val-temp').innerText = `${state.ambientTemp} °C`;
+            document.getElementById('val-load').innerText = `${state.loadDemand} W`;
+
+            // Temperature math: Tcell = Tamb + (Irradiance/800)*(NOCT - 20) where NOCT ~ 45°C
+            state.cellTemp = parseFloat((state.ambientTemp + (state.irradiance / 800) * 25).toFixed(1));
+
+            // Voltage math: Voc decreases with temperature (-0.35%/°C)
+            const tempDiff = state.cellTemp - 25;
+            const voltageBase = 400.0 - (tempDiff * 0.8);
+            state.vDC = parseFloat((state.irradiance > 20 ? Math.max(0, voltageBase + (Math.random() * 2 - 1)) : 0).toFixed(1));
+
+            // Current math: Directly proportional to Irradiance
+            const maxImp = 11.2;
+            state.iDC = parseFloat(((state.irradiance / 1000) * maxImp * (1 + (Math.random() * 0.02 - 0.01))).toFixed(1));
+
+            // Power math: P = V * I
+            state.power = Math.round(state.vDC * state.iDC);
+
+            // Battery SOC simulation: Charges if Power > Load, Discharges otherwise
+            const netPower = state.power - state.loadDemand;
+            if (netPower > 0 && state.batterySOC < 100) {
+                state.batterySOC = Math.min(100, state.batterySOC + 0.05);
+            } else if (netPower < 0 && state.batterySOC > 0) {
+                state.batterySOC = Math.max(0, state.batterySOC - 0.05);
+            }
+
+            // Normal Insulation Resistance
+            state.isoResistance = parseFloat((45.0 + (Math.random() * 2 - 1)).toFixed(1));
+
+            refreshKPIs();
+            evaluateSafetyRules();
+        }
+
+        /* ==========================================================================
+           TELEMETRY LOOP & CHART UPDATES
+           ========================================================================== */
+        function telemetryLoop() {
+            if (!state.faultActive) {
+                // Add slight real-world noise to metrics
+                const noiseV = (Math.random() * 1.5 - 0.75);
+                state.vDC = parseFloat(Math.max(0, state.vDC + noiseV).toFixed(1));
+                state.power = Math.round(state.vDC * state.iDC);
+                refreshKPIs();
+            }
+
+            // Update Chart Data (Keep last 20 seconds)
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+
+            state.chartData.labels.push(timeStr);
+            state.chartData.power.push(state.power);
+            state.chartData.irradiance.push(state.irradiance);
+            state.chartData.voltage.push(state.vDC);
+
+            if (state.chartData.labels.length > 20) {
+                state.chartData.labels.shift();
+                state.chartData.power.shift();
+                state.chartData.irradiance.shift();
+                state.chartData.voltage.shift();
+            }
+
+            state.chart.update();
+        }
+
+        /* ==========================================================================
+           REFRESH KPI DASHBOARD UI
+           ========================================================================== */
+        function refreshKPIs() {
+            document.getElementById('kpi-v-dc').innerText = state.vDC.toFixed(1);
+            document.getElementById('kpi-i-dc').innerText = state.iDC.toFixed(1);
+            document.getElementById('kpi-power').innerText = state.power;
+            document.getElementById('kpi-temp').innerText = state.cellTemp.toFixed(1);
+            document.getElementById('kpi-soc').innerText = Math.round(state.batterySOC);
+            document.getElementById('kpi-soc-bar').style.width = `${Math.round(state.batterySOC)}%`;
+            document.getElementById('kpi-iso').innerText = state.isoResistance.toFixed(1);
+
+            // Dynamic Efficiency calculation
+            const theoreticalMaxPower = (state.irradiance / 1000) * 4400; // 4.4kW array
+            const eff = theoreticalMaxPower > 0 ? Math.min(99.9, ((state.power / theoreticalMaxPower) * 100)).toFixed(1) : '0.0';
+            document.getElementById('kpi-eff').innerText = `${eff}%`;
+
+            // Dynamic status tags
+            document.getElementById('kpi-v-status').innerText = state.vDC > 450 ? 'SOBRETENSIÓN' : (state.vDC < 300 && state.irradiance > 500 ? 'BAJO' : 'OK');
+            document.getElementById('kpi-v-status').className = state.vDC > 450 ? 'text-rose-400 font-bold' : 'text-emerald-400';
+
+            document.getElementById('kpi-temp-status').innerText = state.cellTemp > 75 ? 'PELIGRO' : (state.cellTemp > 55 ? 'ELEVADA' : 'Óptima');
+            document.getElementById('kpi-temp-status').className = state.cellTemp > 75 ? 'text-rose-400 font-bold' : (state.cellTemp > 55 ? 'text-amber-400' : 'text-emerald-400');
+
+            document.getElementById('kpi-iso-status').innerText = state.isoResistance < 1.0 ? 'FALLA TIERRA' : 'Seguro';
+            document.getElementById('kpi-iso-status').className = state.isoResistance < 1.0 ? 'text-rose-400 font-bold' : 'text-emerald-400';
+
+            // Update tab 2 risk cards dynamically
+            updateRiskDiagnosticTab();
+        }
+
+        /* ==========================================================================
+           FAULTS INJECTION ENGINE
+           ========================================================================== */
+        function injectFault(type) {
+            state.faultActive = true;
+            state.faultType = type;
+            state.alarmAcknowledged = false;
+
+            if (type === 'overvoltage') {
+                state.vDC = 535.8;
+                state.power = Math.round(state.vDC * state.iDC);
+                triggerAlarm('¡SOBRETENSIÓN CRÍTICA EN ARREGLO DC! Voltaje superó límite de seguridad (535.8V > 450.0V). Riesgo para condensadores de inversor.');
+                addLogEntry('CRITICAL', 'ALERTA: Sobretensión en DC detectada (535.8V). Disparo de protección programado.');
+            } else if (type === 'arc_fault') {
+                state.isoResistance = 0.1;
+                state.iDC = 2.1; // Drop due to arcing gap resistance
+                state.power = Math.round(state.vDC * state.iDC);
+                triggerAlarm('¡DETECCION DE ARCO ELÉCTRICO / FALLA DE AISLAMIENTO! Resistencia a tierra cayó a 0.1 MΩ. Peligro inminente de incendio.');
+                addLogEntry('CRITICAL', 'ALERTA DE SEGURIDAD: Falla de Aislamiento a Tierra (<1.0 MΩ) y patrón de Arco Eléctrico DC.');
+            } else if (type === 'overtemp') {
+                state.cellTemp = 88.5;
+                triggerAlarm('¡EXCESO DE TEMPERATURA EN CELDAS! Temperatura de panel alcanzó 88.5°C (>75.0°C). Descontrol térmico en progreso.');
+                addLogEntry('CRITICAL', 'ALERTA TÉRMICA: Sobretemperatura extrema en arreglo fotovoltaico (88.5°C).');
+            }
+
+            refreshKPIs();
+        }
+
+        function resetConditions() {
+            state.faultActive = false;
+            state.faultType = null;
+            state.alarmAcknowledged = false;
+
+            stopAlarmAudio();
+            document.getElementById('critical-alarm-banner').classList.add('hidden');
+            
+            // Reset Status Badge
+            const badge = document.getElementById('header-status-badge');
+            badge.className = "px-4 py-1.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-xs font-bold tracking-wider flex items-center gap-2 uppercase";
+            document.getElementById('header-status-text').innerText = "Sistema Normal";
+
+            // Restore sliders math
+            updateSimParameters();
+            addLogEntry('INFO', 'Restablecimiento manual completado. Parámetros operativos retornados a estado normal.');
+        }
+
+        /* ==========================================================================
+           SAFETY EVALUATION & ALARM SYSTEM LOGIC
+           ========================================================================== */
+        function evaluateSafetyRules() {
+            if (state.faultActive) return;
+
+            if (state.vDC > 450.0) {
+                triggerAlarm('Sobretensión DC detectada por encima del margen tolerable.');
+            } else if (state.cellTemp > 75.0) {
+                triggerAlarm('Sobretemperatura crítica de celda.');
+            } else if (state.isoResistance < 1.0) {
+                triggerAlarm('Pérdida de aislamiento galvánico a tierra.');
+            }
+        }
+
+        function triggerAlarm(msg) {
+            document.getElementById('alarm-banner-msg').innerText = msg;
+            document.getElementById('critical-alarm-banner').classList.remove('hidden');
+
+            const badge = document.getElementById('header-status-badge');
+            badge.className = "px-4 py-1.5 rounded-full bg-rose-950/90 border border-rose-500 text-rose-300 text-xs font-bold tracking-wider flex items-center gap-2 uppercase glow-danger";
+            document.getElementById('header-status-text').innerText = "¡ALARMA CRÍTICA!";
+
+            if (!state.alarmMuted && !state.alarmAcknowledged) {
+                startAlarmAudio();
+            }
+        }
+
+        function acknowledgeAlarm() {
+            state.alarmAcknowledged = true;
+            stopAlarmAudio();
+            addLogEntry('WARN', 'Alarma reconocida por el operador. Sirena mutada manualmente.');
+        }
+
+        /* ==========================================================================
+           WEB AUDIO API - SYNTHETIC EMERGENCY SIREN
+           ========================================================================== */
+        function toggleAudioMute() {
+            state.alarmMuted = !state.alarmMuted;
+            const icon = document.getElementById('audio-icon');
+            const text = document.getElementById('audio-text');
+
+            if (state.alarmMuted) {
+                icon.className = 'fa-solid fa-volume-xmark text-slate-400';
+                text.innerText = 'Audio Alarma: Silenciado';
+                stopAlarmAudio();
+            } else {
+                icon.className = 'fa-solid fa-volume-high text-cyan-400 animate-pulse';
+                text.innerText = 'Audio Alarma: HABILITADO';
+                if (state.faultActive && !state.alarmAcknowledged) {
+                    startAlarmAudio();
+                }
+            }
+        }
+
+        function startAlarmAudio() {
+            if (state.audioCtx) return; // Audio already playing
+
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                state.audioCtx = new AudioContext();
+
+                state.oscillator = state.audioCtx.createOscillator();
+                state.gainNode = state.audioCtx.createGain();
+
+                state.oscillator.type = 'sawtooth';
+                state.oscillator.frequency.setValueAtTime(800, state.audioCtx.currentTime);
+
+                // Alternating frequency (Siren effect)
+                let high = false;
+                setInterval(() => {
+                    if (state.oscillator && state.audioCtx) {
+                        state.oscillator.frequency.setValueAtTime(high ? 800 : 1200, state.audioCtx.currentTime);
+                        high = !high;
+                    }
+                }, 400);
+
+                state.gainNode.gain.setValueAtTime(0.15, state.audioCtx.currentTime);
+
+                state.oscillator.connect(state.gainNode);
+                state.gainNode.connect(state.audioCtx.destination);
+                state.oscillator.start();
+            } catch (e) {
+                console.warn('Audio Web API no soportada o bloqueada por políticas del navegador.');
+            }
+        }
+
+        function stopAlarmAudio() {
+            if (state.oscillator) {
+                try {
+                    state.oscillator.stop();
+                    state.oscillator.disconnect();
+                } catch (e) {}
+                state.oscillator = null;
+            }
+            if (state.audioCtx) {
+                try {
+                    state.audioCtx.close();
+                } catch (e) {}
+                state.audioCtx = null;
+            }
+        }
+
+        /* ==========================================================================
+           BITÁCORA / EVENT LOGGING SYSTEM
+           ========================================================================== */
+        function addLogEntry(level, message) {
+            const container = document.getElementById('event-log-container');
+            const entry = document.createElement('div');
+            const timestamp = new Date().toTimeString().split(' ')[0];
+
+            let colorClass = 'text-slate-300';
+            let badge = '[INFO]';
+            if (level === 'CRITICAL') {
+                colorClass = 'text-rose-400 font-bold';
+                badge = '[CRÍTICO]';
+            } else if (level === 'WARN') {
+                colorClass = 'text-amber-400';
+                badge = '[ADVERTENCIA]';
+            }
+
+            entry.className = `${colorClass} flex gap-2 border-b border-slate-900/60 pb-1`;
+            entry.innerHTML = `<span class="text-slate-500">${timestamp}</span> <span class="font-bold">${badge}</span> <span>${message}</span>`;
+
+            container.prepend(entry);
+        }
+
+        function clearEventLog() {
+            document.getElementById('event-log-container').innerHTML = '';
+            addLogEntry('INFO', 'Bitácora de eventos reiniciada por el operador.');
+        }
+
+        /* ==========================================================================
+           CHART.JS REAL-TIME SETUP
+           ========================================================================== */
+        function initChart() {
+            const ctx = document.getElementById('telemetryChart').getContext('2d');
+            state.chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: state.chartData.labels,
+                    datasets: [
+                        {
+                            label: 'Potencia (W)',
+                            data: state.chartData.power,
+                            borderColor: '#00f5a0',
+                            backgroundColor: 'rgba(0, 245, 160, 0.05)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            yAxisID: 'yPower'
+                        },
+                        {
+                            label: 'Irradiancia (W/m²)',
+                            data: state.chartData.irradiance,
+                            borderColor: '#00f0ff',
+                            borderWidth: 1.5,
+                            borderDash: [4, 4],
+                            fill: false,
+                            tension: 0.2,
+                            yAxisID: 'yIrradiance'
+                        },
+                        {
+                            label: 'Voltaje DC (V)',
+                            data: state.chartData.voltage,
+                            borderColor: '#ffb703',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.1,
+                            yAxisID: 'yVoltage'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 300 },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(31, 45, 77, 0.4)' },
+                            ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } }
+                        },
+                        yPower: {
+                            type: 'linear',
+                            position: 'left',
+                            grid: { color: 'rgba(31, 45, 77, 0.4)' },
+                            ticks: { color: '#00f5a0', font: { family: 'JetBrains Mono', size: 10 } },
+                            title: { display: true, text: 'Potencia (W)', color: '#00f5a0', font: { size: 10 } }
+                        },
+                        yIrradiance: {
+                            type: 'linear',
+                            position: 'right',
+                            display: false,
+                            min: 0,
+                            max: 1300
+                        },
+                        yVoltage: {
+                            type: 'linear',
+                            position: 'right',
+                            grid: { drawOnChartArea: false },
+                            ticks: { color: '#ffb703', font: { family: 'JetBrains Mono', size: 10 } },
+                            title: { display: true, text: 'Voltaje (V)', color: '#ffb703', font: { size: 10 } }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        /* ==========================================================================
+           TAB SWITCHING LOGIC
+           ========================================================================== */
+        function switchTab(tabId) {
+            const tabs = ['tab-telemetry', 'tab-risk', 'tab-alarm'];
+            tabs.forEach(t => {
+                const el = document.getElementById(t);
+                const btn = document.getElementById(`nav-${t}`);
+                if (t === tabId) {
+                    el.classList.remove('hidden');
+                    btn.className = "tab-btn px-4 py-2.5 text-cyan-400 border-b-2 border-cyan-400 flex items-center gap-2 transition font-bold";
+                } else {
+                    el.classList.add('hidden');
+                    btn.className = "tab-btn px-4 py-2.5 text-slate-400 hover:text-white border-b-2 border-transparent flex items-center gap-2 transition";
+                }
+            });
+        }
+
+        /* ==========================================================================
+           TAB 2: DYNAMIC RISK DIAGNOSTIC UPDATE
+           ========================================================================== */
+        function updateRiskDiagnosticTab() {
+            // Arco Eléctrico
+            const arcCard = document.getElementById('risk-card-arc');
+            const arcLevel = document.getElementById('risk-arc-level');
+            const arcDesc = document.getElementById('risk-arc-desc');
+
+            if (state.faultType === 'arc_fault') {
+                arcCard.className = "scada-panel scada-panel-danger rounded-xl p-4 transition glow-danger";
+                arcLevel.innerText = "¡CRÍTICO - ARCO DETECTADO!";
+                arcLevel.className = "text-sm font-bold text-rose-500";
+                arcDesc.innerText = "Se detectó fluctuación de alta frecuencia y ruptura dieléctrica. Alto riesgo de incendio de bandeja.";
+            } else {
+                arcCard.className = "scada-panel rounded-xl p-4 border border-slate-800 transition";
+                arcLevel.innerText = "Bajo / Normal";
+                arcLevel.className = "text-sm font-bold text-emerald-400";
+                arcDesc.innerText = "Corriente DC continua dentro de rangos normales. Sin indicios de ionización o arcos en conectores MC4.";
+            }
+
+            // Choque Eléctrico
+            const shockLevel = document.getElementById('risk-shock-level');
+            if (state.vDC > 450) {
+                shockLevel.innerText = "¡PELIGRO EXTREMO DE SOBRETENSIÓN!";
+                shockLevel.className = "text-sm font-bold text-rose-400";
+            } else if (state.vDC > 120) {
+                shockLevel.innerText = "Peligro Tensión Alta DC (>120V)";
+                shockLevel.className = "text-sm font-bold text-amber-400";
+            } else {
+                shockLevel.innerText = "Tensión Segura TBT (<60V)";
+                shockLevel.className = "text-sm font-bold text-emerald-400";
+            }
+
+            // Estrés Térmico
+            const thermalCard = document.getElementById('risk-card-thermal');
+            const thermalLevel = document.getElementById('risk-thermal-level');
+            const thermalDesc = document.getElementById('risk-thermal-desc');
+
+            if (state.cellTemp > 75) {
+                thermalCard.className = "scada-panel scada-panel-danger rounded-xl p-4 transition glow-danger";
+                thermalLevel.innerText = "¡ALERTA DE DESCONTROL TÉRMICO!";
+                thermalLevel.className = "text-sm font-bold text-rose-500";
+                thermalDesc.innerText = "Temperatura celda > 75°C. Degeneración de capas EVA y riesgo de desprendimiento de busbars.";
+            } else {
+                thermalCard.className = "scada-panel rounded-xl p-4 border border-slate-800 transition";
+                thermalLevel.innerText = "Temperatura Segura";
+                thermalLevel.className = "text-sm font-bold text-emerald-400";
+                thermalDesc.innerText = "Temperatura de celdas bajo umbral de degradación acelerada y descontrol térmico.";
+            }
+
+            // Aislamiento Tierra
+            const isoCard = document.getElementById('risk-card-iso');
+            const isoLevel = document.getElementById('risk-iso-level');
+            const isoDesc = document.getElementById('risk-iso-desc');
+
+            if (state.isoResistance < 1.0) {
+                isoCard.className = "scada-panel scada-panel-danger rounded-xl p-4 transition glow-danger";
+                isoLevel.innerText = "¡FALLA DE AISLAMIENTO A TIERRA!";
+                isoLevel.className = "text-sm font-bold text-rose-500";
+                isoDesc.innerText = "Resistencia < 1 MΩ. Estructura metálica del soporte energizada. Riesgo de electrocución al contacto.";
+            } else {
+                isoCard.className = "scada-panel rounded-xl p-4 border border-slate-800 transition";
+                isoLevel.innerText = "Aislamiento Correcto";
+                isoLevel.className = "text-sm font-bold text-emerald-400";
+                isoDesc.innerText = "Resistencia a tierra por encima de 1 MΩ. Corriente de fuga a estructura inexistente.";
+            }
+        }
+
+        /* ==========================================================================
+           TAB 2: LOTO CHECKLIST PROGRESS LOGIC
+           ========================================================================== */
+        function updateLotoProgress() {
+            const checkboxes = document.querySelectorAll('.loto-check');
+            let checkedCount = 0;
+            checkboxes.forEach(cb => { if (cb.checked) checkedCount++; });
+
+            const pct = Math.round((checkedCount / checkboxes.length) * 100);
+            document.getElementById('loto-progress-pct').innerText = `${pct}%`;
+            document.getElementById('loto-progress-bar').style.width = `${pct}%`;
+
+            const statusBox = document.getElementById('loto-status-box');
+            const statusText = document.getElementById('loto-status-text');
+            const btnPermit = document.getElementById('btn-permit');
+
+            if (pct === 100) {
+                statusBox.className = "mt-5 p-3 rounded-lg bg-emerald-950/80 border border-emerald-600 flex items-center justify-between text-xs";
+                statusText.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 mr-2"></i><strong>ZONA SEGURA VERIFICADA:</strong> Se han ejecutado y validado los 6 pasos del protocolo LOTO.`;
+                btnPermit.disabled = false;
+                btnPermit.className = "px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded cursor-pointer transition shadow-lg";
+                btnPermit.onclick = function() {
+                    addLogEntry('INFO', 'PERMISO DE TRABAJO SEGURO EMITIDO. Intervención técnica autorizada en arreglo FV.');
+                    btnPermit.innerText = "Permiso Emitido ✔";
+                };
+            } else {
+                statusBox.className = "mt-5 p-3 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-xs";
+                statusText.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-400 mr-2"></i>Estado: Mantenimiento NO autorizado. Complete todos los pasos (${checkedCount}/${checkboxes.length}).`;
+                btnPermit.disabled = true;
+                btnPermit.className = "px-4 py-1.5 bg-slate-800 text-slate-500 font-bold rounded cursor-not-allowed transition";
+                btnPermit.innerText = "Emitir Permiso de Trabajo";
+            }
+        }
+
+        /* ==========================================================================
+           TAB 3: INTERACTIVE SVG DIAGRAM TOOLTIPS
+           ========================================================================== */
+        function showDiagramDetail(part) {
+            const titleEl = document.getElementById('diag-title');
+            const descEl = document.getElementById('diag-desc');
+
+            const details = {
+                paneles: {
+                    title: '<i class="fa-solid fa-solar-panel text-cyan-400"></i> Arreglo Fotovoltaico (Strings FV)',
+                    desc: 'Cadena de 10 paneles monocristalinos de 440W conectados en serie. Tensión de circuito abierto Voc = 480 V, Corriente de cortocircuito Isc = 11,5 A. Requiere conexión equipotencial de puesta a tierra a la estructura metálica.'
+                },
+                fusibles: {
+                    title: '<i class="fa-solid fa-box text-amber-400"></i> Fusibles de Cadena gPV (1000V DC)',
+                    desc: 'Protección contra sobrecorrientes en corriente continua. Curva ultra-rápida gPV diseñada específicamente para fotovoltaica según IEC 60269-6. Capacidad de interrupción de 15A por polo.'
+                },
+                dps: {
+                    title: '<i class="fa-solid fa-bolt-lightning text-yellow-400"></i> Descargador de Sobretensiones (DPS / SPD DC)',
+                    desc: 'Dispositivo supresor de picos transitorios inducidos por descargas atmosféricas (rayos). Tipo 2, tensión máxima de operación continua Uc = 1000 V DC. Desvía picos de corriente a la malla de tierra sin interrumpir el suministro.'
+                },
+                seccionador: {
+                    title: '<i class="fa-solid fa-power-off text-rose-500"></i> Seccionador bajo Carga DC',
+                    desc: 'Interruptor rotativo de corte omnipolar en carga (Categoría DC-PV2). Permite el aislamiento galvanic de la corriente continua de forma segura antes de realizar intervenciones o activar el protocolo LOTO.'
+                },
+                sensores: {
+                    title: '<i class="fa-solid fa-microchip text-sky-400"></i> Sensores de Telemetría (Efecto Hall & Divisor Tensión)',
+                    desc: 'Capturadores de señal en tiempo real: Transductor de corriente Hall ACS758 aislado ópticamente e interfaz resistiva de alta impedancia para acondicionamiento de tensión de 0-500V DC a rango de 0-3.3V ADC del microcontrolador.'
+                },
+                inversor: {
+                    title: '<i class="fa-solid fa-plug text-emerald-400"></i> Inversor Central / Regulador MPPT',
+                    desc: 'Etapa de potencia que ejecuta el seguimiento del punto de máxima potencia (MPPT) y convierte los 380V DC a 230V AC monofásico / trifásico para sincronización con la red o alimentación de cargas.'
+                },
+                alarma_unit: {
+                    title: '<i class="fa-solid fa-brain text-purple-400"></i> Unidad de Monitoreo ESP32 & Relé de Alarma',
+                    desc: 'Microcontrolador programado con lógica de seguridad preventiva. Al evaluar umbrales críticos (V DC &gt; 450 V, T &gt; 75 °C o Riso &lt; 1 MΩ), conmuta un relé de estado sólido (SSR) de alta velocidad.'
+                },
+                baliza: {
+                    title: '<i class="fa-solid fa-[#ff0055] fa-lightbulb text-rose-500"></i> Sirena y Baliza Estroboscópica 24V DC',
+                    desc: 'Actuador industrial de alerta audible (105 dB a 1 metro) y destellador LED rojo de alta visibilidad para aviso de emergencia eléctrica en la planta solar.'
+                }
+            };
+
+            if (details[part]) {
+                titleEl.innerHTML = details[part].title;
+                descEl.innerHTML = details[part].desc;
+            }
+        }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('sw.js').catch(function (e) { console.warn('SW no registrado:', e); });
+            });
+        }
+    </script>
+</body>
+</html>
